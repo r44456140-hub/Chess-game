@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chess</title>
+<style>
+:root{--bg:#1a1e24;--panel:#242b35;--fg:#e6edf3;--mut:#8b949e;--accent:#e5a93c;--btn:#2ea043;--sq-light:#ece3ce;--sq-dark:#739552;--sq-sel:#f5f682;--sq-last:#baca44;--sq-chk:#e05353;--size:min(92vw,480px);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none}
+
+#splash{position:fixed;inset:0;background:#0d1117;display:flex;align-items:center;justify-content:center;z-index:1000;transition:opacity .6s ease,visibility .6s ease}
+#splash.hide{opacity:0;visibility:hidden;pointer-events:none}
+.ram-text{font-size:5rem;font-weight:900;letter-spacing:12px;color:#ff9933;text-shadow:0 0 25px rgba(255,153,51,.6);animation:pulse 1.4s ease-in-out infinite alternate}
+@keyframes pulse{from{transform:scale(.96);opacity:.85}to{transform:scale(1.04);opacity:1}}
+
+#app{display:flex;flex-direction:column;align-items:center;gap:12px;padding:12px;width:100%;max-width:520px}
+.header{display:flex;justify-content:space-between;align-items:center;width:var(--size)}
+h1{font-size:1.5rem;margin:0;font-weight:700;color:#fff}
+#status{font-size:1rem;font-weight:600;color:var(--accent);text-align:right}
+
+.player-bar{width:var(--size);display:flex;justify-content:space-between;align-items:center;background:var(--panel);padding:8px 12px;border-radius:8px;font-size:.95rem}
+.player-name{font-weight:600;display:flex;align-items:center;gap:6px}
+.turn-pill{width:10px;height:10px;border-radius:50%;border:2px solid var(--mut)}
+.active .turn-pill{background:#2ea043;border-color:#2ea043;box-shadow:0 0 8px #2ea043}
+.captured{font-size:1.15rem;min-height:1.3em;letter-spacing:-2px}
+
+#board-wrapper{position:relative;width:var(--size);height:var(--size);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.5);overflow:hidden}
+#board{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);width:100%;height:100%}
+.square{position:relative;width:100%;height:100%;border:0;padding:0;margin:0;cursor:pointer;font-size:calc(var(--size)/8*.82);line-height:1;display:flex;align-items:center;justify-content:center;font-family:"Segoe UI Symbol","Noto Sans Symbols 2","Apple Symbols",serif}
+
+.square.light{background:var(--sq-light)}
+.square.dark{background:var(--sq-dark)}
+.square.selected{background:var(--sq-sel)!important}
+.square.last-move{background:var(--sq-last)!important}
+.square.in-check{background:var(--sq-chk)!important}
+.square.move::after{content:"";position:absolute;width:26%;height:26%;border-radius:50%;background:rgba(0,0,0,.28)}
+.square.move.capture::after{width:82%;height:82%;background:none;border:calc(var(--size)/8*.08) solid rgba(0,0,0,.28)}
+.white-piece{color:#fff;text-shadow:0 0 2px #000,0 1px 2px rgba(0,0,0,.8)}
+.black-piece{color:#1a1a1a;text-shadow:0 0 1px rgba(255,255,255,.4)}
+
+.controls{display:flex;gap:10px;width:var(--size)}
+.controls button{flex:1;font-size:.95rem;font-weight:600;padding:12px;border:0;border-radius:6px;cursor:pointer;color:#fff;background:#30363d}
+.controls button:active{transform:scale(.98)}
+.controls button:disabled{opacity:.4;cursor:not-allowed}
+.controls button.primary{background:var(--btn)}
+#promo-modal{position:absolute;inset:0;background:rgba(13,17,23,.85);display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;z-index:200}
+#promo-modal.show{display:flex}
+.promo-box{display:flex;gap:8px;background:var(--panel);padding:12px;border-radius:10px}
+.promo-btn{font-size:2.4rem;background:#30363d;border:none;border-radius:8px;width:58px;height:58px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+</style>
+</head>
+<body>
+<div id="splash"><div class="ram-text">RAM</div></div>
+<div id="app">
+  <div class="header"><h1>Chess</h1><div id="status">White's Turn</div></div>
+  
+  <div class="player-bar" id="bar-black">
+    <div class="player-name"><span class="turn-pill"></span> Black</div>
+    <div class="captured" id="cap-black"></div>
+  </div>
+  
+  <div id="board-wrapper">
+    <div id="board"></div>
+    <div id="promo-modal">
+      <div style="font-weight:600;color:#fff">Promote Pawn</div>
+      <div class="promo-box" id="promo-options"></div>
+    </div>
+  </div>
+  
+  <div class="player-bar" id="bar-white">
+    <div class="player-name"><span class="turn-pill"></span> White</div>
+    <div class="captured" id="cap-white"></div>
+  </div>
+  
+  <div class="controls">
+    <button id="undo-btn">Undo Move</button>
+    <button id="reset-btn" class="primary">New Game</button>
+  </div>
+</div>
+
+<script>
+window.addEventListener('DOMContentLoaded',()=>{setTimeout(()=>document.getElementById('splash').classList.add('hide'),1500)});
+const PIECES={k:'♚\uFE0E',q:'♛\uFE0E',r:'♜\uFE0E',b:'♝\uFE0E',n:'♞\uFE0E',p:'♟\uFE0E'};
+const DIRS={n:[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]],b:[[-1,-1],[-1,1],[1,-1],[1,1]],r:[[-1,0],[1,0],[0,-1],[0,1]]};
+DIRS.q=[...DIRS.b,...DIRS.r];DIRS.k=DIRS.q;
+const isWhite=p=>p&&p===p.toUpperCase();
+const isOwn=(p,w)=>p&&isWhite(p)===w;
+
+function createInitialState(){
+  const b=[];
+  'rnbqkbnr'.split('').forEach(x=>b.push(x));
+  for(let i=0;i<8;i++)b.push('p');
+  for(let i=0;i<32;i++)b.push('');
+  for(let i=0;i<8;i++)b.push('P');
+  'RNBQKBNR'.split('').forEach(x=>b.push(x));
+  return{b,turn:'w',cr:'KQkq',ep:-1,capturedW:[],capturedB:[]};
+}
+
+function isSquareAttacked(s,sq,byWhite){
+  for(let i=0;i<64;i++){
+    const p=s.b[i];
+    if(p&&isWhite(p)===byWhite&&generatePseudoMoves(s,i,true).some(m=>m.t===sq))return true;
+  }
+  return false;
+}
+
+function generatePseudoMoves(s,i,onlyAttacks=false){
+  const p=s.b[i];
+  if(!p)return[];
+  const w=isWhite(p),type=p.toLowerCase(),r=i>>3,c=i&7,moves=[];
+  
+  if(type==='p'){
+    const dir=w?-1:1,startRow=w?6:1,promoRow=w?0:7;
+    const checkCap=c2=>{
+      if(c2<0||c2>7)return;
+      const target=(r+dir)*8+c2;
+      if(onlyAttacks){moves.push({f:i,t:target});return;}
+      const pt=s.b[target];
+      if(pt&&isOwn(pt,!w))moves.push({f:i,t:target,promo:(r+dir)===promoRow});
+      else if(target===s.ep)moves.push({f:i,t:target,ep:1});
+    };
+    checkCap(c-1);checkCap(c+1);
+    if(!onlyAttacks){
+      const step1=(r+dir)*8+c;
+      if(!s.b[step1]){
+        moves.push({f:i,t:step1,promo:(r+dir)===promoRow});
+        const step2=(r+dir*2)*8+c;
+        if(r===startRow&&!s.b[step2])moves.push({f:i,t:step2,dbl:1});
+      }
+    }
+    return moves;
+  }
+  
+  const isSlider=type==='b'||type==='r'||type==='q';
+  for(const[dr,dc]of DIRS[type]){
+    let r2=r+dr,c2=c+dc;
+    while(r2>=0&&r2<8&&c2>=0&&c2<8){
+      const target=r2*8+c2,pt=s.b[target];
+      if(!pt||isOwn(pt,!w))moves.push({f:i,t:target});
+      if(pt||!isSlider)break;
+      r2+=dr;c2+=dc;
+    }
+  }
+  
+  if(type==='k'&&!onlyAttacks){
+    const base=w?56:0,kS=w?'K':'k',kL=w?'Q':'q',rook=w?'R':'r';
+    if(i===base+4){
+      if(s.cr.includes(kS)&&!s.b[base+5]&&!s.b[base+6]&&s.b[base+7]===rook&&!isSquareAttacked(s,base+4,!w)&&!isSquareAttacked(s,base+5,!w)&&!isSquareAttacked(s,base+6,!w))
+        moves.push({f:i,t:base+6,castle:1});
+      if(s.cr.includes(kL)&&!s.b[base+3]&&!s.b[base+2]&&!s.b[base+1]&&s.b[base]===rook&&!isSquareAttacked(s,base+4,!w)&&!isSquareAttacked(s,base+3,!w)&&!isSquareAttacked(s,base+2,!w))
+        moves.push({f:i,t:base+2,castle:-1});
+    }
+  }
+  return moves;
+}
+
+function executeMove(s,m,promoChoice='q'){
+  const b=[...s.b],p=b[m.f],w=isWhite(p);
+  let cr=s.cr,ep=-1;
+  const capturedW=[...s.capturedW],capturedB=[...s.capturedB];
+  if(b[m.t])(w?capturedW:capturedB).push(b[m.t]);
+  b[m.t]=m.promo?(w?promoChoice.toUpperCase():promoChoice.toLowerCase()):p;
+  b[m.f]='';
+  if(m.ep){const e=m.t+(w?8:-8);(w?capturedW:capturedB).push(b[e]);b[e]='';}
+  if(m.dbl)ep=(m.f+m.t)/2;
+  if(m.castle){
+    const base=w?56:0;
+    if(m.castle>0){b[base+5]=b[base+7];b[base+7]='';}
+    else{b[base+3]=b[base];b[base]='';}
+  }
+  const rm=t=>{cr=cr.replace(t,'')};
+  if(p==='K'){rm('K');rm('Q');}
+  if(p==='k'){rm('k');rm('q');}
+  [[56,'Q'],[63,'K'],[0,'q'],[7,'k']].forEach(([sq,ch])=>{if(m.f===sq||m.t===sq)rm(ch)});
+  return{b,turn:s.turn==='w'?'b':'w',cr,ep,capturedW,capturedB};
+}
+
+function isInCheck(s,w){
+  const k=s.b.indexOf(w?'K':'k');
+  return k!==-1&&isSquareAttacked(s,k,!w);
+}
+
+function getLegalMoves(s,i){
+  const w=isWhite(s.b[i]);
+  return generatePseudoMoves(s,i).filter(m=>!isInCheck(executeMove(s,m),w));
+}
+
+function hasAnyLegalMoves(s){
+  const w=s.turn==='w';
+  for(let i=0;i<64;i++)if(isOwn(s.b[i],w)&&getLegalMoves(s,i).length>0)return true;
+  return false;
+}
+
+let state,historyStack=[],lastMove=null,selectedSquare=-1,legalMoves=[],pendingPromo=null;
+const boardEl=document.getElementById('board'),statusEl=document.getElementById('status');
+const capWEl=document.getElementById('cap-white'),capBEl=document.getElementById('cap-black');
+const barW=document.getElementById('bar-white'),barB=document.getElementById('bar-black');
+const promoModal=document.getElementById('promo-modal'),promoOpts=document.getElementById('promo-options');
+const squares=[];
+
+for(let i=0;i<64;i++){
+  const btn=document.createElement('button');
+  btn.onclick=()=>onSquareClick(i);
+  boardEl.appendChild(btn);
+  squares.push(btn);
+}
+
+function resetGame(){
+  state=createInitialState();historyStack=[];lastMove=null;selectedSquare=-1;legalMoves=[];pendingPromo=null;
+  promoModal.classList.remove('show');
+  render();
+}
+
+function onSquareClick(i){
+  if(pendingPromo)return;
+  const turnW=state.turn==='w';
+  const move=selectedSquare>=0&&legalMoves.find(m=>m.t===i);
+  if(move){
+    if(move.promo){showPromotionChoice(move);return;}
+    applyMove(move);return;
+  }
+  const piece=state.b[i];
+  if(piece&&isOwn(piece,turnW)){selectedSquare=i;legalMoves=getLegalMoves(state,i);}
+  else{selectedSquare=-1;legalMoves=[];}
+  render();
+}
+
+function showPromotionChoice(m){
+  pendingPromo=m;
+  const isW=state.turn==='w';
+  promoOpts.innerHTML='';
+  ['q','r','b','n'].forEach(type=>{
+    const btn=document.createElement('button');
+    btn.className='promo-btn '+(isW?'white-piece':'black-piece');
+    btn.textContent=PIECES[type];
+    btn.onclick=()=>{promoModal.classList.remove('show');const pm=pendingPromo;pendingPromo=null;applyMove(pm,type);};
+    promoOpts.appendChild(btn);
+  });
+  promoModal.classList.add('show');
+}
+
+function applyMove(move,promoChoice='q'){
+  historyStack.push({state,lastMove});
+  state=executeMove(state,move,promoChoice);
+  lastMove=move;selectedSquare=-1;legalMoves=[];
+  render();
+}
+
+function render(){
+  const isW=state.turn==='w',inChk=isInCheck(state,isW),canMove=hasAnyLegalMoves(state),kingIdx=state.b.indexOf(isW?'K':'k');
+  squares.forEach((el,i)=>{
+    const piece=state.b[i],isTarget=legalMoves.find(m=>m.t===i),row=i>>3,col=i&7;
+    el.className='square '+((row+col)%2?'dark':'light')
+      +(i===selectedSquare?' selected':'')
+      +(lastMove&&(lastMove.f===i||lastMove.t===i)?' last-move':'')
+      +(isTarget?' move':'')
+      +(isTarget&&(piece||(state.ep===i&&state.b[selectedSquare].toLowerCase()==='p'))?' capture':'')
+      +(inChk&&i===kingIdx?' in-check':'')
+      +(piece?(isWhite(piece)?' white-piece':' black-piece'):'');
+    el.textContent=piece?PIECES[piece.toLowerCase()]:'';
+  });
+  barW.classList.toggle('active',isW);
+  barB.classList.toggle('active',!isW);
+  statusEl.textContent=!canMove?(inChk?`Checkmate! ${isW?'Black':'White'} wins!`:'Stalemate - Draw!'):(isW?'White':'Black')+(inChk?' is in Check!':"'s Turn");
+  
+  capWEl.innerHTML=state.capturedW.map(p=>`<span class="black-piece">${PIECES[p.toLowerCase()]}</span>`).join('');
+  capBEl.innerHTML=state.capturedB.map(p=>`<span class="white-piece">${PIECES[p.toLowerCase()]}</span>`).join('');
+}
+
+document.getElementById('undo-btn').onclick=()=>{
+  if(!historyStack.length)return;
+  const prev=historyStack.pop();
+  state=prev.state;
+  lastMove=prev.lastMove;
+  selectedSquare=-1;
+  legalMoves=[];
+  pendingPromo=null;
+  promoModal.classList.remove('show');
+  render();
+};
+
+document.getElementById('reset-btn').onclick=resetGame;
+
+// Start the game!
+resetGame();
+</script>
+</body>
+</html>
